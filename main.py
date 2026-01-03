@@ -1,12 +1,13 @@
 """
-Телеграм бот для мониторинга и удаления спама в группе.
+Телеграм бот для мониторинга и удаления спама в группах.
 """
 
 import logging
 import sys
+from typing import Union
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from config import BOT_TOKEN, GROUP_ID
+from config import BOT_TOKEN, GROUP_IDS
 from rules import is_spam
 
 # Настройка логирования
@@ -16,24 +17,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def is_message_from_monitored_chat(chat_id: Union[int, str], chat_username: str = None) -> bool:
+    """
+    Проверяет, пришло ли сообщение из одного из отслеживаемых чатов.
+    
+    Args:
+        chat_id: ID чата (может быть числом или строкой)
+        chat_username: Юзернейм чата (если есть)
+        
+    Returns:
+        bool: True если чат находится в списке отслеживаемых, иначе False
+    """
+    str_chat_id = str(chat_id)
+    
+    for group_id in GROUP_IDS:
+        # Сравниваем ID чата (как строку)
+        if str_chat_id == str(group_id):
+            return True
+            
+        # Если это публичный чат, проверяем username
+        if chat_username and isinstance(group_id, str) and group_id.startswith('@'):
+            if chat_username == group_id[1:]:  # Убираем @ для сравнения
+                return True
+                
+    return False
 
 async def check_and_delete_spam(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Проверяет сообщение на спам и удаляет его, если оно является спамом.
     """
-
     logger.info(f"Поступило сообщение от пользователя {update.effective_user.id}...")
 
-    # Проверяем, что сообщение из нужной группы
-    chat_id = str(update.effective_chat.id)
-    group_username = GROUP_ID.replace('@', '')
-    if GROUP_ID and chat_id != str(GROUP_ID) and (not update.effective_chat.username or update.effective_chat.username != group_username):
-        logger.info(f"неверный чат {chat_id}...")
+    # Проверяем, что сообщение из одной из отслеживаемых групп
+    chat_id = update.effective_chat.id
+    chat_username = getattr(update.effective_chat, 'username', None)
+    
+    if not is_message_from_monitored_chat(chat_id, chat_username):
+        logger.info(f"Сообщение из неотслеживаемого чата {chat_id}...")
         return
     
     # Проверяем, что это не команда бота
     if update.message and update.message.text and update.message.text.startswith('/'):
-        logger.info(f"распознана команда бота ...")
+        logger.info("Распознана команда бота, пропускаем проверку на спам")
         return
     
     # Получаем текст сообщения
@@ -45,7 +70,7 @@ async def check_and_delete_spam(update: Update, context: ContextTypes.DEFAULT_TY
             message_text = update.message.caption
     
     # Проверяем на спам
-    logger.info(f"Проверка сообщение на спам: {message_text}")
+    logger.info(f"Проверка сообщения на спам: {message_text[:100]}...")
 
     if message_text and is_spam(message_text):
         try:
@@ -75,24 +100,22 @@ def main() -> None:
         logger.error("Пожалуйста, установите BOT_TOKEN в config.py")
         sys.exit(1)
     
-    if GROUP_ID == "YOUR_GROUP_ID_HERE":
-        logger.error("Пожалуйста, установите GROUP_ID в config.py")
+    if not GROUP_IDS:
+        logger.error("Пожалуйста, установите GROUP_IDS в config.py")
         sys.exit(1)
     
     # Создаем приложение
     application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Добавляем обработчик для всех сообщений в группах
-    # Фильтруем только сообщения в группах и супергруппах
-    message_filter = filters.ChatType.GROUPS & ~filters.StatusUpdate.ALL
-    
-    application.add_handler(MessageHandler(message_filter, check_and_delete_spam))
+
+    # Добавляем обработчик сообщений
+    application.add_handler(MessageHandler(filters.ALL, check_and_delete_spam))
+
+    # Выводим информацию о мониторинге
+    logger.info(f"Бот запущен. Отслеживаем {len(GROUP_IDS)} чатов: {', '.join(str(g) for g in GROUP_IDS)}")
     
     # Запускаем бота
-    logger.info("Бот запущен и готов к работе...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == '__main__':
     main()
-
