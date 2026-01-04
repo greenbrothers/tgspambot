@@ -66,7 +66,7 @@ nohup python main.py > bot.log 2>&1 &
 ## 🚀 Закуск через docker
 Запуск:
 ```bash
-docker-compose up -d
+docker-compose up --build -d
 ```
 
 Остановка:
