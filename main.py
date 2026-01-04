@@ -8,7 +8,7 @@ from typing import Union
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from config import BOT_TOKEN, GROUP_IDS
-from rules import is_spam
+from rules import is_spam, SKIP_ADMINS, SKIP_FORWARDED_MESSAGES, SKIP_CHANNEL_POSTS
 
 # Настройка логирования
 logging.basicConfig(
@@ -42,6 +42,27 @@ def is_message_from_monitored_chat(chat_id: Union[int, str], chat_username: str 
                 
     return False
 
+async def is_user_admin(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int) -> bool:
+    """
+    Проверяет, является ли пользователь администратором чата.
+    
+    Args:
+        context: Контекст бота
+        chat_id: ID чата
+        user_id: ID пользователя
+        
+    Returns:
+        bool: True если пользователь является администратором или создателем, иначе False
+    """
+    try:
+        member = await context.bot.get_chat_member(chat_id, user_id)
+        # Статусы: 'creator', 'administrator', 'member', 'restricted', 'left', 'kicked'
+        return member.status in ('creator', 'administrator')
+    except Exception as e:
+        logger.error(f"Ошибка при проверке статуса пользователя {user_id}: {e}")
+        # В случае ошибки считаем, что пользователь не администратор (безопаснее)
+        return False
+
 async def check_and_delete_spam(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Проверяет сообщение на спам и удаляет его, если оно является спамом.
@@ -60,6 +81,23 @@ async def check_and_delete_spam(update: Update, context: ContextTypes.DEFAULT_TY
     if update.message and update.message.text and update.message.text.startswith('/'):
         logger.info("Распознана команда бота, пропускаем проверку на спам")
         return
+    
+    # Проверяем, является ли сообщение от имени канала/чата (если настроено)
+    if SKIP_CHANNEL_POSTS and update.message and update.message.sender_chat:
+        logger.info(f"Сообщение от имени канала/чата {update.message.sender_chat.id}, пропускаем проверку")
+        return
+    
+    # Проверяем, является ли сообщение пересланным (если настроено)
+    if SKIP_FORWARDED_MESSAGES and update.message and (update.message.forward_from or update.message.forward_from_chat):
+        logger.info("Пересланное сообщение, пропускаем проверку на спам")
+        return
+    
+    # Проверяем, является ли пользователь администратором (если настроено)
+    if SKIP_ADMINS and update.effective_user:
+        user_id = update.effective_user.id
+        if await is_user_admin(context, chat_id, user_id):
+            logger.info(f"Пользователь {user_id} является администратором, пропускаем проверку на спам")
+            return
     
     # Получаем текст сообщения
     message_text = ""
