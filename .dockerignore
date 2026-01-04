@@ -1,0 +1,18 @@
+# Игнорируем кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Игнорируем виртуальное окружение
+venv/
+
+# Игнорируем файлы конфигурации IDE
+.vscode/
+.idea/
+
+# Игнорируем .env файлы (их нужно передавать через переменные окружения)
+.env
+
+# Игнорируем сам Dockerfile и .dockerignore
+Dockerfile
+.dockerignore

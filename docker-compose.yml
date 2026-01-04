@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: tgspambot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - .:/app
+    # Если боту нужен доступ к внешним ресурсам или API
+    network_mode: host
+    # Или можно использовать стандартные сети Docker
+    # networks:
+    #   - tgspambot-network
+
+# networks:
+#   tgspambot-network:
+#     driver: bridge
