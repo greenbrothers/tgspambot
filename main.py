@@ -88,7 +88,7 @@ async def check_and_delete_spam(update: Update, context: ContextTypes.DEFAULT_TY
         return
     
     # Проверяем, является ли сообщение пересланным (если настроено)
-    if SKIP_FORWARDED_MESSAGES and update.message and (update.message.forward_from or update.message.forward_from_chat):
+    if SKIP_FORWARDED_MESSAGES and update.message and hasattr(update.message, 'forward_origin'):
         logger.info("Пересланное сообщение, пропускаем проверку на спам")
         return
     
